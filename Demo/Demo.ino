@@ -1,10 +1,10 @@
 #include <BURT_can.h>
 #include <BURT_proto.h>
 
-#include "src/BURT_arm.h"
+#include "BURT_arm.h"
 
 #include "src/generated/electrical.pb.h"
-#include "src/generated/science.pb.h"
+#include "src/science.pb.h"
 
 #define ELECTRICAL_DATA_ID 0x23
 #define SCIENCE_COMMAND_ID 0xC3

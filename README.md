@@ -12,48 +12,70 @@ Firmware code is written as Arduino sketches. An Arduino sketch is defined as a 
 
 ## Specialized code
 
-The [Arduino sketch specification](https://arduino.github.io/arduino-cli/0.20/sketch-specification/#additional-code-files) states that all code inside your sketch's `src` folder (`Demo/src`) are compiled. Say you're writing code to move the arm. You can make an `Arm` class: 
+Often, hardware-specific code can get complex and unwieldly, and is better relegated to separate C++ files. The same is true for overly complex logic. Try to reserve the `.ino` file for high-level logic, and relegate the low-level implementation to other C++ files. The [Arduino sketch specification](https://arduino.github.io/arduino-cli/0.20/sketch-specification/#additional-code-files) states that all code inside your sketch's `src` folder (eg, `Demo/src`) are compiled, so we’ll put them there and `#include` them later. For example, say you're writing code for the EA team – you might want a `MethaneSensor` class: 
 ```cpp
-// Demo/src/BURT_arm.h
+// Demo/src/BURT_methane.h
 #include <Arduino.h>  // needed for Arduino code, like Serial
 
-class Arm {
+class MethaneSensor {
+  private: 
+  	int pin;
+  
 	public:
-		void moveTo(float x, float y, float z);
+  	MethaneSensor(int pin) : pin(pin);
+		float read();
 };
 ```
 ```cpp
-// Demo/src/BURT_arm.cpp
-#include "BURT_arm.h"
+// Demo/src/BURT_methane.cpp
+#include "BURT_methane.h"
 
-void Arm::moveTo(float x, float y, float z) { /* ... */ }
+void MethaneSensor::read() { return analogRead(pin) }  // insert real logic here
 ```
 And then simply include it in your sketch: 
 ```cpp
 // Demo/Demo.ino
-#include "src/BURT_arm.h"
+#include "src/BURT_methane.h"
 
-Arm arm;
+#define METHANE_PIN 12
 
-void setup() { 
-  arm.moveTo(0, 0, 0); 
+MethaneSensor methaneSensor(METHANE_PIN);
+
+void sendData() { 
+  float methane = methaneSensor.read(); 
+  // ...
 }
 ```
 
+The goal is to make the `.ino` file more readable, and no hardware-specific logic should be there. If you find yourself including a lot of header files, you can simplify them: 
+
+```cpp
+// Demo/BURT_science.h
+#include "src/BURT_methane.h"
+// include more BURT_x.h libraries here
+```
+
+```cpp
+// Demo/Demo.ino
+#include "BURT_science.h"  // This file includes all necessary classes
+```
+
+
+
 ## Protobuf overview
 
-Google's [Protocol Buffers](https://protobuf.dev/), referred to as "Protobuf", allows us to synchronize our data formates across various platforms, languages, and implementations. However, the C++ installation of `protoc`, the Protobuf compiler, does not play nicely with Arduino's framework. To get around that issue, we use [`nanopb`](https://github.com/nanopb/nanopb) instead -- a smaller and simpler version of Protobuf. 
+Google's [Protocol Buffers](https://protobuf.dev/), referred to as "Protobuf", allows us to synchronize our data formats across various platforms, languages, and implementations. However, the C++ installation of `protoc`, the Protobuf compiler, does not play nicely with Arduino's framework. To get around that issue, we use [`nanopb`](https://github.com/nanopb/nanopb) instead -- a smaller and simpler version of Protobuf. 
 
 Integrating Protobuf into your code is a 3-step process: 
 
 ### Including the `.proto` files
 
-Protobuf defines data in its own language, in a file with the `.proto` extension. We keep our Protobuf files in a [separate repository](https://github.com/BinghamtonRover/Protobuf), so you'll first need to include that in your code. The following commands assume your sketch is named `<SKETCH>` -- for example, this repository's sketch name is `Demo`. 
+Protobuf defines data in its own language, in a file with the `.proto` extension. We keep our Protobuf files in a [separate repository](https://github.com/BinghamtonRover/Protobuf), so you'll first need to include that in your code. The following commands assume your sketch is named `Demo` -- adapt them for your repository. 
 
 To keep our Protobuf files in sync, add them as a submodule: 
 ```bash
-# Clones the Protobuf repository into <SKETCH>/src/Protobuf. They won't be compiled
-git submodule add https://github.com/BinghamtonRover/Protobuf <SKETCH>/src/Protobuf
+# Clones the Protobuf repository into a new Protobuf folder. They won't be compiled
+git submodule add https://github.com/BinghamtonRover/Protobuf
 ```
 
 ### Installing Protobuf and `nanopb`
@@ -73,18 +95,18 @@ python3 -m pip install nanopb
 
 ### Using the Protobuf files
 
-Finally, you can generate the C++ code for your Proto files. These files will be stored in your sketch's `src` folder -- which compiles _everything_ -- so you only want to generate the files you need. Going off the Arm example, say you want to generate `arm.proto`: 
+Finally, you can generate the C++ code for your Proto files. These files will be stored in your sketch's `src` folder -- which compiles _everything_ -- so you only want to generate the files you need. Continuing the science example, say you want to generate `science.proto`: 
 
 To generate Protobuf code: 
 ```bash
 # Be sure to create the generated folder if it doesn't exist
-nanopb_generator -I <SKETCH>/src/Protobuf -D <SKETCH>/src/generated arm.proto
+nanopb_generator -I Protobuf -D Demo science.proto
 ```
 
-Now in your sketch: 
+This generates a file `Demo/science.pb.h`. Now, in your sketch: 
 ```cpp
 // Demo/Demo.ino
-#include "src/generated/arm.pb.h"
+#include "science.pb.h"
 ```
 
 You now have access to all the data defined in the Proto files. Whatever is declared as a `message` in there will be generated as a `struct` in the `.pb.h` files.
@@ -116,19 +138,23 @@ void loop() {
 
 ### Sending messages
 
-You can easily send a Protobuf message using the `send` function. Say you want to send some Protobuf-generated struct `ElectricalData`: 
+You can easily send a Protobuf message using the `send` function. Say you want to send some Protobuf-generated struct `ScienceData`: 
 
 ```cpp
-#include "src/generated/electrical.pb.h"
+#include "src/BURT_methane.h"
+#include "src/electrical.pb.h"
 
-// See the CAN repository for details
-#define ELECTRICAL_DATA_ID 0x23
+#define SCIENCE_DATA_ID 0x27  // See the CAN repository for details
+
+#define METHANE_PIN 12
+
+MethaneSensor methaneSensor(12);
 
 void sendData() {
-	ElectricalData data;
-	data.v5_voltage = 5.0;
+	ScienceData data;
+	data.methane = methaneSensor.read();
 	// The 2nd parameter is always MessageName_fields
-	BurtCan::send(ELECTRICAL_DATA_ID, ElectricalData_fields, &data);
+	BurtCan::send(SCIENCE_DATA_ID, ScienceData_fields, &data);
 }
 
 void loop() {
@@ -144,8 +170,7 @@ You can define a callback to run when a new CAN frame of a specific ID is receiv
 
 ```cpp
 #include <BURT_proto.h>
-
-#include "src/generated/science.pb.h"
+#include "src/science.pb.h"
 
 void handleScienceCommand(const CanMessage& message) {
 	// The 2nd parameter is always MessageName_fields
@@ -170,4 +195,4 @@ void setup() {
 }
 ```
 
-Now `handleScienceCommand` will run whenever a new CAN frame is received with ID `0xC3`, decode that frame as a `ScienceCommand` instance, and check whether it should dig.
+Now `handleScienceCommand` will run whenever a new CAN frame is received with ID `0x83`, decode that frame as a `ScienceCommand` instance, and check whether it should dig.
