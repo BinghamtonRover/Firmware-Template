@@ -14,11 +14,11 @@ Often, hardware-specific code can get complex and unwieldly, and is better releg
 
 class MethaneSensor {
   private: 
-  	int pin;
+    int pin;
   
-	public:
-  	MethaneSensor(int pin) : pin(pin) { }
-		float read();
+  public:
+    MethaneSensor(int pin) : pin(pin) { }
+    float read();
 };
 ```
 ```cpp
@@ -26,7 +26,7 @@ class MethaneSensor {
 #include "BURT_methane.h"
 
 float MethaneSensor::read() { 
-	return analogRead(pin);  // insert real logic here
+  return analogRead(pin);  // insert real logic here
 }
 ```
 And then simply include it in your sketch: 
@@ -118,13 +118,13 @@ The `BURT_can` library defines a class, `BurtCan`, which can send and receive me
 #include <BURT_can.h>
 
 void setup() {
-	BurtCan::setup();
-	// ...
+  BurtCan::setup();
+  // ...
 }
 
 void loop() {
-	BurtCan::update();
-	// ...
+  BurtCan::update();
+  // ...
 }
 ```
 
@@ -144,10 +144,10 @@ You can easily send a Protobuf message using the `send` function. Say you want t
 MethaneSensor methaneSensor(12);
 
 void sendData() {
-	ScienceData data;
-	data.methane = methaneSensor.read();
-	// The 2nd parameter is always MessageName_fields
-	BurtCan::send(SCIENCE_DATA_ID, ScienceData_fields, &data);
+  ScienceData data;
+  data.methane = methaneSensor.read();
+  // The 2nd parameter is always MessageName_fields
+  BurtCan::send(SCIENCE_DATA_ID, ScienceData_fields, &data);
 }
 
 void loop() {
@@ -170,15 +170,15 @@ You can define a callback to run when a new CAN frame of a specific ID is receiv
 
 // This is a [ProtoHandler] -- your function's parameters must match.
 void handleScienceCommand(const uint8_t* data, int length) {
-	// The 2nd parameter is always MessageName_fields
+  // The 2nd parameter is always MessageName_fields
   auto command = BurtProto::decode<ScienceCommand>(data, ScienceCommand_fields);
   if (command.dig) Serial.println("Digging!");
 }
 
 void setup() {
-	BurtCan::setup();
-	BurtCan::registerHandler(SCIENCE_COMMAND_ID, handleScienceCommand);
-	// more handlers here...
+  BurtCan::setup();
+  BurtCan::registerHandler(SCIENCE_COMMAND_ID, handleScienceCommand);
+  // more handlers here...
 }
 ```
 
@@ -194,10 +194,10 @@ Similarly, we want the `ScienceCommand` handler to run whenever a command is sen
 BurtSerial serial(handleCommand);
 
 void loop() {
-	BurtCan::update();
+  BurtCan::update();
   sendData();
-	serial.parseSerial();
-	delay(10);  // don't want to overload Serial or CAN
+  serial.parseSerial();
+  delay(10);  // don't want to overload Serial or CAN
 }
 ```
 
