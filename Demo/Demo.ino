@@ -16,7 +16,7 @@ BurtSerial serial(handleScienceCommand);
 
 void handleScienceCommand(const uint8_t* data, int length) {
   // The 2nd parameter is always MessageName_fields
-  auto command = BurtProto::decode<ScienceCommand>(data, ScienceCommand_fields);
+  auto command = BurtProto::decode<ScienceCommand>(data, length, ScienceCommand_fields);
   if (command.dig) Serial.println("Digging!");
 }
 

@@ -171,7 +171,7 @@ You can define a callback to run when a new CAN frame of a specific ID is receiv
 // This is a [ProtoHandler] -- your function's parameters must match.
 void handleScienceCommand(const uint8_t* data, int length) {
   // The 2nd parameter is always MessageName_fields
-  auto command = BurtProto::decode<ScienceCommand>(data, ScienceCommand_fields);
+  auto command = BurtProto::decode<ScienceCommand>(data, length, ScienceCommand_fields);
   if (command.dig) Serial.println("Digging!");
 }
 
