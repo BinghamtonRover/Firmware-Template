@@ -1,40 +1,41 @@
 #include <BURT_can.h>
 #include <BURT_proto.h>
+#include <BURT_serial.h>
 
-#include "BURT_arm.h"
-
-#include "src/generated/electrical.pb.h"
+#include "src/BURT_methane.h"
 #include "src/science.pb.h"
 
-#define ELECTRICAL_DATA_ID 0x23
+// See the CAN repository for details
+#define SCIENCE_DATA_ID 0x27
 #define SCIENCE_COMMAND_ID 0xC3
 
-Arm arm;
+#define METHANE_PIN 12
 
-void sendData() {
-  ElectricalData data;
-  data.v5_voltage = 5.0;
+MethaneSensor methaneSensor(METHANE_PIN);
+BurtSerial serial(handleScienceCommand);
+
+void handleScienceCommand(const uint8_t* data, int length) {
   // The 2nd parameter is always MessageName_fields
-  BurtCan::send(ELECTRICAL_DATA_ID, ElectricalData_fields, &data);
+  auto command = BurtProto::decode<ScienceCommand>(data, ScienceCommand_fields);
+  if (command.dig) Serial.println("Digging!");
 }
 
-void handleScienceCommand(const CanMessage& message) {
+void sendData() { 
+  ScienceData data;
+  data.methane = methaneSensor.read(); 
   // The 2nd parameter is always MessageName_fields
-  ScienceCommand command = BurtProto::decode<ScienceCommand>(
-    message.buf, ScienceCommand_fields
-  );
-
-  if (command.dig) Serial.println("Digging!");
+  BurtCan::send(SCIENCE_DATA_ID, ScienceData_fields, &data);
 }
 
 void setup() {
   BurtCan::setup();
   BurtCan::registerHandler(SCIENCE_COMMAND_ID, handleScienceCommand);
-  arm.moveTo(0, 0, 0);
+  // more handlers here...
 }
 
 void loop() {
   BurtCan::update();
   sendData();
+  serial.parseSerial();
   delay(10);
 }

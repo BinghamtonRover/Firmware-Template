@@ -1,18 +1,13 @@
-# Teensy Demo Arduino Sketch
+# Firmware Integration Sketch
 
-This repository is a demo for how to integrate Protobuf, CAN, and extra code in your Arduino project. The rest of this document will specify the structure and reasoning exactly, and this repository can serve as a demonstration of following these instructions.
+This example is a demonstration on how to integrate hardware code, Protobuf, CAN, and Serial in your Arduino sketch, based on our [Firmware-Utilities](https://github.com/BinghamtonRover/Firmware-Utilities) library. The rest of this document will specify the structure and reasoning exactly, and the code can serve as a demonstration of following these instructions.
 
-## Overview
+This example contains a sketch called `Demo`. Adapt the commands below to your firmware sketch's name. 
 
-Firmware code is written as Arduino sketches. An Arduino sketch is defined as a folder (say, `Demo`), with a `.ino` file of the same name (like `Demo/Demo.ino`). 
-
-- **Specialized code**: Interfacing with hardware can be complex and might depend on several other libraries
-- **Protobuf**: Firmware has to interface with the Subsystems Pi. We use Protobuf to keep our data definitions in sync
-- **CAN bus**: To send and receive data, we use the CAN bus protocol. 
-
-## Specialized code
+## Hardware code
 
 Often, hardware-specific code can get complex and unwieldly, and is better relegated to separate C++ files. The same is true for overly complex logic. Try to reserve the `.ino` file for high-level logic, and relegate the low-level implementation to other C++ files. The [Arduino sketch specification](https://arduino.github.io/arduino-cli/0.20/sketch-specification/#additional-code-files) states that all code inside your sketch's `src` folder (eg, `Demo/src`) are compiled, so we’ll put them there and `#include` them later. For example, say you're writing code for the EA team – you might want a `MethaneSensor` class: 
+
 ```cpp
 // Demo/src/BURT_methane.h
 #include <Arduino.h>  // needed for Arduino code, like Serial
@@ -22,7 +17,7 @@ class MethaneSensor {
   	int pin;
   
 	public:
-  	MethaneSensor(int pin) : pin(pin);
+  	MethaneSensor(int pin) : pin(pin) { }
 		float read();
 };
 ```
@@ -30,7 +25,9 @@ class MethaneSensor {
 // Demo/src/BURT_methane.cpp
 #include "BURT_methane.h"
 
-void MethaneSensor::read() { return analogRead(pin) }  // insert real logic here
+float MethaneSensor::read() { 
+	return analogRead(pin);  // insert real logic here
+}
 ```
 And then simply include it in your sketch: 
 ```cpp
@@ -47,79 +44,74 @@ void sendData() {
 }
 ```
 
-The goal is to make the `.ino` file more readable, and no hardware-specific logic should be there. If you find yourself including a lot of header files, you can simplify them: 
+The goal is to make the `.ino` file more readable, and no hardware-specific logic should be there. If you need a lot of hardware code, you can organize them in subdirectories under `src` and bundle them into one higher-level header file:
 
 ```cpp
 // Demo/BURT_science.h
-#include "src/BURT_methane.h"
-// include more BURT_x.h libraries here
+#include "src/methane/BURT_methane.h"
+#include "src/humidity/BURT_humidity.h"
+// ...
 ```
 
 ```cpp
 // Demo/Demo.ino
-#include "BURT_science.h"  // This file includes all necessary classes
+#include "BURT_science.h"
 ```
 
+## Including the Firmware Utilities
 
+Clone the [Firmware Utilities](https://github.com/BinghamtonRover/Firmware-Utilities) repository into a new folder (not in your sketch), and run the `sync.sh` or `sync.bat` script to install it into your Arduino libraries folder.
 
-## Protobuf overview
-
-Google's [Protocol Buffers](https://protobuf.dev/), referred to as "Protobuf", allows us to synchronize our data formats across various platforms, languages, and implementations. However, the C++ installation of `protoc`, the Protobuf compiler, does not play nicely with Arduino's framework. To get around that issue, we use [`nanopb`](https://github.com/nanopb/nanopb) instead -- a smaller and simpler version of Protobuf. 
+### Using Protobuf files and the `BURT_proto library`
 
 Integrating Protobuf into your code is a 3-step process: 
 
-### Including the `.proto` files
+#### Including the `.proto` files
 
-Protobuf defines data in its own language, in a file with the `.proto` extension. We keep our Protobuf files in a [separate repository](https://github.com/BinghamtonRover/Protobuf), so you'll first need to include that in your code. The following commands assume your sketch is named `Demo` -- adapt them for your repository. 
+Protobuf defines data in its own language, in a file with the `.proto` extension. We keep our Protobuf files in a [separate repository](https://github.com/BinghamtonRover/Protobuf), so you'll first need to include that in your code. 
 
 To keep our Protobuf files in sync, add them as a submodule: 
 ```bash
 # Clones the Protobuf repository into a new Protobuf folder. They won't be compiled
 git submodule add https://github.com/BinghamtonRover/Protobuf
 ```
-
-### Installing Protobuf and `nanopb`
-
-You'll need to install Google's Protobuf compiler [here](https://github.com/protocolbuffers/protobuf/releases/latest). For C++, you only need to download the `protoc` files for your platform. Once downloaded, extract the files and put them in your PATH. 
-
-Now you need to install nanopb. There are two parts to `nanopb`: 
-
-1. The executable that runs `protoc` to generate your code
-2. The libraries that the generated code should include
-
-The C++ libraries are included for you (see below), but you'll have to get the Python-based executable yourself:
+If you clone this repository, make sure you run
 ```bash
-# Make sure to install Python if you don't have it already
-python3 -m pip install nanopb
+git submodule update --init
+```
+To update your Protobuf files in the future, you can either `cd` into it and `git pull` as normal, or run this command: 
+```bash
+git submodule update --remote
 ```
 
-### Using the Protobuf files
+#### Using the Protobuf files
 
-Finally, you can generate the C++ code for your Proto files. These files will be stored in your sketch's `src` folder -- which compiles _everything_ -- so you only want to generate the files you need. Continuing the science example, say you want to generate `science.proto`: 
+First, be sure to follow the instructions in the Firmware-Utilities repository to install `protoc` and `nanopb`. Now you can generate the C++ code for your `.proto` files. These files will be stored in your sketch's `src` folder -- which compiles _everything_ -- so you only want to generate the files you need. Continuing the science example, say you want to generate `science.proto`: 
 
 To generate Protobuf code: 
 ```bash
-# Be sure to create the generated folder if it doesn't exist
-nanopb_generator -I Protobuf -D Demo science.proto
+nanopb_generator -I Protobuf -D Demo/src science.proto
 ```
 
-This generates a file `Demo/science.pb.h`. Now, in your sketch: 
+This generates a file `Demo/src/science.pb.h`. Now, in your sketch: 
 ```cpp
 // Demo/Demo.ino
-#include "science.pb.h"
+#include "src/science.pb.h"
 ```
 
-You now have access to all the data defined in the Proto files. Whatever is declared as a `message` in there will be generated as a `struct` in the `.pb.h` files.
+You now have access to all the data defined in the Proto files. Whatever is declared as a `message` in there will be generated as a `struct` in the `.pb.h` files. When writing code, use the `.proto` files as a reference -- _not_ the structs.
 
-## Using CAN bus
+You should not need to encode Protobuf messages directly -- the `BURT_can` and `BURT_serial` libraries handle this for you. But you will need to _decode_ messages yourself, since you need to know ahead of time which message type to use. 
 
-Our firmware communicates with a Raspberry Pi using the [CAN bus protocol](https://en.wikipedia.org/wiki/CAN_bus). Our `CAN` repository provides an Arduino library that bundles everything you'll need for CAN bus and Protobuf. Follow the instructions in the README there to install that library. 
+The `decode<T>` function will be explained below, in the context of decoding a CAN message.
 
-There are examples in that repository, but here's the simple gist: 
+### Using the `BURT_can` library.
 
-### Initialization
+The Firmware-Utilities repository has details on how CAN bus works, so this section focuses on how to _use_ the library. 
 
-To start, include the library, initialize on startup and update it on every loop
+#### Initialization
+
+The `BURT_can` library defines a class, `BurtCan`, which can send and receive messages over CAN. To start, include the library, and initialize CAN on startup and update it on every loop. 
 
 ```cpp
 // Demo/Demo.ino
@@ -136,15 +128,16 @@ void loop() {
 }
 ```
 
-### Sending messages
+#### Sending messages
 
 You can easily send a Protobuf message using the `send` function. Say you want to send some Protobuf-generated struct `ScienceData`: 
 
 ```cpp
 #include "src/BURT_methane.h"
-#include "src/electrical.pb.h"
+#include "src/science.pb.h"
 
-#define SCIENCE_DATA_ID 0x27  // See the CAN repository for details
+// See the CAN repository for details
+#define SCIENCE_DATA_ID 0x27  
 
 #define METHANE_PIN 12
 
@@ -164,29 +157,23 @@ void loop() {
 }
 ```
 
-### Receiving messages
+#### Receiving messages
 
-You can define a callback to run when a new CAN frame of a specific ID is received. You have to decode it as the correct Protobuf message yourself, based on the ID. Assuming the data is a Protobuf message, say `ScienceCommand`: 
+You can define a callback to run when a new CAN frame of a specific ID is received. You have to decode it as the correct Protobuf message yourself, based on the ID. Here's an example of parsing a `ScienceCommand` from a CAN message with ID `0xC3`: 
 
 ```cpp
 #include <BURT_proto.h>
 #include "src/science.pb.h"
 
-void handleScienceCommand(const CanMessage& message) {
-	// The 2nd parameter is always MessageName_fields
-	ScienceCommand command = BurtProto::decode<ScienceCommand>(
-		message.buf, ScienceCommand_fields
-	);
-
-	if (command.dig) Serial.println("Digging!");
-}
-```
-
-Now all that's left is to register that handler to run:
-
-```cpp
 // See the CAN repository for details
 #define SCIENCE_COMMAND_ID 0xC3
+
+// This is a [ProtoHandler] -- your function's parameters must match.
+void handleScienceCommand(const uint8_t* data, int length) {
+	// The 2nd parameter is always MessageName_fields
+  auto command = BurtProto::decode<ScienceCommand>(data, ScienceCommand_fields);
+  if (command.dig) Serial.println("Digging!");
+}
 
 void setup() {
 	BurtCan::setup();
@@ -196,3 +183,27 @@ void setup() {
 ```
 
 Now `handleScienceCommand` will run whenever a new CAN frame is received with ID `0x83`, decode that frame as a `ScienceCommand` instance, and check whether it should dig.
+
+### Using the `BURT_serial` library
+
+Similarly, we want the `ScienceCommand` handler to run whenever a command is sent over _Serial_, as well. To make this happen, simply register the handler using the `BURT_serial` library as well, and check for updates in `loop`: 
+
+```cpp
+#include <BURT_serial.h>
+
+BurtSerial serial(handleCommand);
+
+void loop() {
+	BurtCan::update();
+  sendData();
+	serial.parseSerial();
+	delay(10);  // don't want to overload Serial or CAN
+}
+```
+
+## Summary
+The above was a step-by-step process of writing a firmware sketch. The full code can be found in `Demo/Demo.ino`, and it implements the following features: 
+
+- Reads methane levels from a sensor on pin 12
+- Sends a `ScienceData` message over CAN with ID `0x27`
+- Checks for a `ScienceCommand` on CAN ID `0xC3` and Serial
