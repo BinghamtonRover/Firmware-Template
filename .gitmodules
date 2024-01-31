@@ -4,3 +4,6 @@
 [submodule "CanDemo/Firmware-Utilities"]
 	path = CanDemo/Firmware-Utilities
 	url = git@github.com:BinghamtonRover/Firmware-Utilities.git
+[submodule "Demo/src/utils"]
+	path = Demo/src/utils
+	url = https://github.com/BinghamtonRover/Firmware-Utilities.git
